@@ -1,0 +1,8 @@
+
+compile with 
+
+  cabal install
+
+run with 
+
+  ./generator 10000 | dist/build/Filters/Filters
