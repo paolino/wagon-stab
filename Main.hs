@@ -2,23 +2,32 @@
 
 import Prelude hiding (minimum, maximum)
 import Data.List (unfoldr)
-import Text.Read
-import Text.ParserCombinators.ReadP
-import Control.Exception
-import Control.Monad
-import System.IO.Error
-import Control.Arrow
+import Text.Read (readMaybe)
+import Control.Exception (tryJust)
+import Control.Monad (guard,forM_)
+import System.IO.Error (isEOFError)
+import Control.Arrow ((&&&))
 import qualified Data.Map as M
-import Control.Lens.TH
-import Control.Lens
+import Control.Lens.TH (makeLenses)
+import Control.Lens (over,view)
 
 
 import Data.List.Split
 
 
 
+------------------------------------------
+--- unforgiving zipWith ------------------
+-----------------------------------------
+
+zipWithU f [] [] = []
+zipWithU f (x:xs) (y:ys) = f x y : zipWithU f xs ys
+zipWithU _ _ _ = error "zipping different length list"
+
+
+
 ----------------------------------------------
----- forcing a list evaluation with elements
+---- forcing a list evaluation with elements -
 ----------------------------------------------
 
 strictList xs = strictList' xs `seq` xs where
@@ -26,30 +35,33 @@ strictList xs = strictList' xs `seq` xs where
   strictList' (x:xs) = x `seq` strictList' xs
 
 
--------------------------------------------------
---- stateful operation type ----------------------
+-----------------------------------------------
+--- stateful operation type -------------------
 -----------------------------------------------
 
--- iso to a mealy machine (Category instance)
+-- isomorphic to a mealy machine (which is a Category instance)
 -- (https://github.com/paolino/sensors/blob/master/MealyT.hs)
--- Nothing is for null row fields, a is input, b is strict output
+--
+-- feeding Nothing is for null row fields, 
+-- a is input type, 
+-- b is strict output type, implementation are responsible to make stricness work 
 
 data Operation b a = Operation !b (Maybe a -> Operation b a) 
 
---  a box for operations hiding result type, as we only need to report. Strict in the Operation to force output
+--  a box for operations hiding result type, as we only need to report. Strict in the Operation to force output (Show, should be JSON)
 
-data Machine a = forall b . (Show b) => Machine !(Operation b a)
+data Machine a = forall b . Show b => Machine !(Operation b a)
 
 -- step the machine, feeding an input
+operate ::  Machine a -> Maybe a -> Machine a
+operate (Machine (Operation _ f)) = Machine .  f  
 
-operate ::  Maybe a -> Machine a -> Machine a
-operate z (Machine (Operation x f)) = Machine .  f  $ z
-
-------------------------------------------
---- machines ----------------------- 
-------------------------------------------
+-----------------------------------
+--- machine zoo  ------------------
+-----------------------------------
 
 -- count nulls and hits
+
 -- if Machine hides the input type 'a' requesting a Read counter should nail down 'a' to some fake Readable datatype detecting null
 
 data Counter = Counter {nulls :: Int, hits :: Int, total :: Int} deriving Show
@@ -64,6 +76,7 @@ counter = let
 -----------------------------------------
 
 -- track minimum value
+
 data Minimum = Minimum !(Maybe Float) deriving Show
 
 minimum :: Operation Minimum Float
@@ -77,7 +90,8 @@ minimum = let
   in make Nothing
 ---------------------------------------------
 
--- track maximum
+-- track maximum value
+
 data Maximum = Maximum !(Maybe Float) deriving Show
 
 maximum :: Operation Maximum Float
@@ -91,7 +105,8 @@ maximum = let
   in make Nothing
 -----------------------------------------------
 
--- track average (sum)
+-- track sum and count (should have a second input from Counter, composition, avoid counting twice), expose average
+
 data Average = Average (Maybe Float) deriving Show
 
 average :: Operation Average Float
@@ -104,7 +119,8 @@ average = let
     
 ----------------------------------------------
 
--- track statistic. 
+-- track statistic, exposing extremants
+
 -- We could track the maximum, but as computing the minimum forces traversal, we compute maximum there also
 data Occur = Occur String Int deriving Show
 data Occurs = NoOccurs | Occurs {smallest::Occur, biggest ::Occur} deriving Show
@@ -117,9 +133,9 @@ instance Read Chars where
   readsPrec _ x = [(Chars x,"")]
 
 
--- traverse statistic and compute the Occurs, to force Map evaluation we read the min key on each insert  
+-- traverse statistic and compute the Occurs lazily, to force Map evaluation we read and seq the min value on each insert  
 report :: M.Map String Int -> Occurs
-report m = r `seq` M.foldrWithKey g NoOccurs m where
+report m = r `seq`  M.foldrWithKey g NoOccurs m where
       g key count NoOccurs =  Occurs (Occur key count) (Occur key count) 
       g key count o@(Occurs (Occur kmi mi) (Occur kma ma) )
         | count > ma =   Occurs (Occur kmi mi) (Occur key count) 
@@ -133,12 +149,13 @@ occurs :: Operation Occurs Chars
 occurs = let
   make m  = Operation (report m) $ f m 
   f m  Nothing = make m 
-  f m  (Just (Chars key))  =  make  $ M.alter (maybe (Just 1) (Just .(+1))) key m
+  f m  (Just (Chars key))  =  make $ M.alter (maybe (Just 1) (Just .(+1))) key m
   in make M.empty  
                 
 ----------------------------------------------
 
--- track legths 
+-- track extremant lengths 
+
 data Length = Length !String !Int deriving Show
 data Lengths = NoLengths | Lengths {smallestL :: !Length, biggestL :: !Length} deriving Show
 
@@ -158,7 +175,9 @@ lengths = let
   in make NoLengths 
                 
 --------------------------------------
--- track average length (sum)
+
+-- track sum length , expose average length
+
 data AverageLength = AverageLength !(Maybe Float) deriving Show
 
 averageLength :: Operation AverageLength Chars
@@ -173,57 +192,52 @@ averageLength = let
 --- end of machines ------------------------------------------
 ---------------------------------------------------------------
 
+
 --- a  contatiner for machines reading same input, should have a strict list as argument, so we force the spine and leave the element evaluation to stepParallels
 data Parallels = forall a. Read a => Parallels ![Machine a]
 
--- step all machines of a Parallels with same input, forcing Machines evaluation
-stepParallels :: String -> Parallels -> Parallels
-stepParallels s (Parallels ms) = Parallels $  strictList $ map (operate . readMaybe $ s) ms
+-- step all machines of a Parallels with same input, forcing each Machine evaluation
+step :: String -> Parallels -> Parallels
+step s (Parallels ms) = Parallels $  strictList $ map (flip operate . readMaybe $ s) ms
 
 
--- a type for different columns
--- the set of machines are intended to work in parallel, thus they share input type, strict in the _machine field
-data Column  
-  = Numeric {title :: String , _machines :: !Parallels} 
-  | Textual {title :: String,  _machines :: !Parallels} 
+-- the set of machines for a column are intended to work in parallel
+data Column  = Column {title :: String , _machines :: !Parallels} 
 
 makeLenses ''Column
 
+-- feed a list of string to be parsed to the list of columns, step is parsing
+feed :: [String] -> [Column] ->  [Column]
+feed  =   zipWithU (over machines . step)  
 
 
+-- from header to Column, assign the machines depending on header type
+column :: String -> Column
+column = (\(n,m) -> Column n $ parallels m) . break (== ' ') . init . tail  where
+  parallels " (number)" =  Parallels $
+    [Machine counter, Machine minimum, Machine maximum, Machine average ]
+  parallels " (text)"   =  Parallels $ 
+    [Machine counter, Machine lengths, Machine averageLength, Machine occurs]
+  parallels _ = error "failed to parse a header"
 
--- from comma separated strings to Column
-parseColumns :: [String] -> [Column]
-parseColumns = map (readField . break (== ' '))  where
-  -- readField (tail -> name, init -> " (number)") = Numeric name . Parallels $ [Machine counter :: Machine Float , Machine minimum, Machine maximum, Machine average]
-  readField (tail -> name, init -> " (number)") = Numeric name . Parallels $ [Machine counter :: Machine Float, Machine minimum, Machine maximum, Machine average ]
-  readField (tail -> name, init -> " (text)")   = Textual name . Parallels $ [Machine counter :: Machine Chars , Machine lengths, Machine averageLength, Machine occurs]
-  -- readField (tail -> name, init -> " (text)")   = Textual name . Parallels $ [Machine counter :: Machine Chars , Machine occurs, Machine lengths, Machine averageLength]
-
-
--- print the values of the machines 
+-- print the values extracted from machines (should be json the class of r)
 output :: Column -> IO ()
 output h = do
   putStrLn  ""
   putStrLn $ title  h
   putStrLn  ""
-  case view machines h of
+  case view machines h of 
     Parallels ms -> forM_ ms $ 
       \(Machine (Operation r _)) -> putStr "-  ">> print r
 
--- feed a line of values to the machines
-feed :: [String] -> [Column] ->  [Column]
-feed  ss cs =   zipWith (over machines . stepParallels)  ss cs 
   
-
 -- get a line without return carriage
 csv :: IO [String]
 csv = splitOn "," <$> filter (/= '\r') <$> getLine
-
 
 -- read all next lines updating the column list on each turn. Return last update, force each Column and the list to whnf 
 cycling :: [Column] -> IO [Column]
 cycling !(strictList -> cs) = tryJust (guard . isEOFError) csv >>= either (const $ return cs) (cycling . flip feed cs)
 
 -- read first line to produce the booting [Column] value, cycle by reading line by line and print a report of the result
-main = parseColumns <$> csv >>= cycling >>= mapM_ output
+main = map column <$> csv >>= cycling >>= mapM_ output
