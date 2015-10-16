@@ -8,7 +8,7 @@ import Control.Exception
 import Control.Monad
 import System.IO.Error
 import Control.Arrow
-import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import Control.Lens.TH
 import Control.Lens
 
@@ -33,12 +33,15 @@ strictList xs = strictList' xs `seq` xs where
 -- iso to a mealy machine (Category instance)
 -- (https://github.com/paolino/sensors/blob/master/MealyT.hs)
 -- Nothing is for null row fields, a is input, b is strict output
+
 data Operation b a = Operation !b (Maybe a -> Operation b a) 
 
 --  a box for operations hiding result type, as we only need to report. Strict in the Operation to force output
+
 data Machine a = forall b . (Show b) => Machine !(Operation b a)
 
 -- step the machine, feeding an input
+
 operate ::  Maybe a -> Machine a -> Machine a
 operate z (Machine (Operation x f)) = Machine .  f  $ z
 
@@ -48,11 +51,12 @@ operate z (Machine (Operation x f)) = Machine .  f  $ z
 
 -- count nulls and hits
 -- if Machine hides the input type 'a' requesting a Read counter should nail down 'a' to some fake Readable datatype detecting null
-data Counter = Counter {nulls :: !Int, hit :: !Int, totals :: !Int} deriving Show
+
+data Counter = Counter {nulls :: Int, hits :: Int, total :: Int} deriving Show
 
 counter  :: Operation Counter a
 counter = let 
-  make n m = Operation (Counter n m (n + m)) $ f n m 
+  make !n !m = Operation (Counter n m (n + m)) $ f n m 
   f n m  Nothing = make (n + 1) m
   f n m  _ = make n (m + 1)
   in make 0 0
@@ -66,7 +70,7 @@ minimum :: Operation Minimum Float
 minimum = let 
   make m = Operation (Minimum m) $ f m 
   f Nothing x = make x
-  f (Just !m) (Just x) 
+  f (Just m) (Just x) 
     | x < m = make $ Just x
     | otherwise = make $ Just m
   f m Nothing = make m
@@ -80,9 +84,9 @@ maximum :: Operation Maximum Float
 maximum = let 
   make m = Operation (Maximum m) $ f m 
   f Nothing x = make x
-  f (Just !m) (Just x) 
+  f (Just m) (Just x) 
     | x > m = make $ Just x
-    | otherwise = make $ Just m
+    | otherwise =  make $ Just m
   f m Nothing = make m
   in make Nothing
 -----------------------------------------------
@@ -113,7 +117,7 @@ instance Read Chars where
   readsPrec _ x = [(Chars x,"")]
 
 
--- traverse statistic and compute the Occurs 
+-- traverse statistic and compute the Occurs, to force Map evaluation we read the min key on each insert  
 report :: M.Map String Int -> Occurs
 report m = r `seq` M.foldrWithKey g NoOccurs m where
       g key count NoOccurs =  Occurs (Occur key count) (Occur key count) 
@@ -124,6 +128,7 @@ report m = r `seq` M.foldrWithKey g NoOccurs m where
         | count == mi && kmi > key =  Occurs (Occur key count) (Occur kma ma) 
         | otherwise = o
       (_,r) = if M.size m > 0 then M.findMin m else (undefined,0)
+
 occurs :: Operation Occurs Chars
 occurs = let
   make m  = Operation (report m) $ f m 
