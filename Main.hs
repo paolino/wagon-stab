@@ -1,4 +1,4 @@
-{-# LANGUAGE ViewPatterns, Rank2Types, ExistentialQuantification#-}
+{-# LANGUAGE ViewPatterns, Rank2Types, ExistentialQuantification, TemplateHaskell#-}
 
 import Prelude hiding (minimum, maximum)
 import Data.List (unfoldr)
@@ -9,6 +9,8 @@ import Control.Monad
 import System.IO.Error
 import Control.Arrow
 import qualified Data.Map as M
+import Control.Lens.TH
+import Control.Lens
 
 
 import Data.List.Split
@@ -19,7 +21,7 @@ import Data.List.Split
 --- stateful operation type ----------------------
 -----------------------------------------------
 
--- iso to a mealy machine (arrow composition is possible)
+-- iso to a mealy machine (Category instance)
 -- (https://github.com/paolino/sensors/blob/master/MealyT.hs)
 -- Nothing is for null row fields, a is input, b is output
 data Operation b a = Operation b (Maybe a -> Operation b a) 
@@ -160,23 +162,30 @@ averageLength = let
 --- end of machines ------------------------------------------
 ---------------------------------------------------------------
 
+data Parallels = forall a. Read a => Parallels [Machine a]
+
+-- step all machines of a Parallels with same input
+stepParallels :: String -> Parallels -> Parallels
+stepParallels s (Parallels ms) = Parallels $ map (operate . readMaybe $ s) ms
+
+
 -- a type for different columns
 -- the set of machines are intended to work in parallel, thus they share input type
 data Column  
-  = Numeric {title :: String , numberMachines :: [Machine Float]} 
-  | Textual {title :: String,  stringMachines :: [Machine Chars]} 
+  = Numeric {title :: String , _machines :: Parallels} 
+  | Textual {title :: String,  _machines :: Parallels} 
+
+makeLenses ''Column
 
 
--- spaghetti everywhere! (hide parameter of Machine with Read constraint ?)
 
-forceColumn (Numeric _ ms) = mapM_ force ms -- this must be investigated, without it blows memory
-forceColumn (Textual _ ms) = mapM_ force ms -- this must be investigated, without it blows memory
+forceColumn (view machines -> Parallels ms) = mapM_ force ms -- this must be investigated, without it blows memory
 
 -- from comma separated strings to Column
 parseColumns :: [String] -> [Column]
 parseColumns = map (readField . break (== ' '))  where
-  readField (tail -> name, init -> " (number)") = Numeric name [Machine counter, Machine minimum, Machine maximum, Machine average]
-  readField (tail -> name, init -> " (text)")   = Textual name [Machine counter, Machine occurs, Machine lengths, Machine averageLength]
+  readField (tail -> name, init -> " (number)") = Numeric name . Parallels $ [Machine counter, Machine minimum, Machine maximum, Machine average]
+  readField (tail -> name, init -> " (text)")   = Textual name . Parallels $ [Machine counter, Machine occurs, Machine lengths, Machine averageLength]
 
 
 -- print the values of the machines 
@@ -185,18 +194,13 @@ output h = do
   putStrLn  ""
   putStrLn $ title  h
   putStrLn  ""
-  case h of
-          Numeric _ ms -> forM_ ms $ \(Machine (Operation r _)) -> do 
-              putStr "-  ">> print r
-          Textual _ ms -> forM_ ms $ \(Machine (Operation r _)) -> do 
-              putStr "-  " >> print r
+  case view machines h of
+    Parallels ms -> forM_ ms $ 
+      \(Machine (Operation r _)) -> putStr "-  ">> print r
 
 -- feed a line of values to the machines
 feed :: [String] -> [Column] ->  [Column]
-feed  = zipWith (\s -> q (operate . readMaybe $ s)) where
-    q :: (forall a. Read a => Machine a -> Machine a) -> Column -> Column
-    q f (Numeric n ms) = Numeric n (map f ms)
-    q f (Textual n ms) = Textual n (map f ms)
+feed  = zipWith (over machines .stepParallels) 
 
 -- get a line without return carriage
 csv :: IO [String]
@@ -211,4 +215,3 @@ cycling cs = do
 
 -- read first line to produce the booting [Column] value, cycle by reading line by line and print a report of the result
 main = parseColumns <$> csv >>= cycling >>= mapM_ output
-  
