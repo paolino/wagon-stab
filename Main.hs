@@ -1,18 +1,24 @@
-{-# LANGUAGE ViewPatterns, Rank2Types, ExistentialQuantification, TemplateHaskell, BangPatterns#-}
+{-# LANGUAGE 
+    ViewPatterns
+  , ExistentialQuantification
+  , TemplateHaskell
+  , BangPatterns
+  #-}
 
 import Prelude hiding (minimum, maximum)
-import Data.List (unfoldr)
 import Text.Read (readMaybe)
 import Control.Exception (tryJust)
 import Control.Monad (guard,forM_)
 import System.IO.Error (isEOFError)
 import Control.Arrow ((&&&))
+
 import qualified Data.Map as M
+
 import Control.Lens.TH (makeLenses)
 import Control.Lens (over,view)
 
 
-import Data.List.Split
+import Data.List.Split (splitOn)
 
 
 
