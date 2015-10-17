@@ -4,6 +4,7 @@
   , TemplateHaskell
   , BangPatterns
   #-}
+-- | Example of Moore machines aka observable filters. 
 module Machines where
 
 import Core
@@ -15,25 +16,6 @@ import qualified Data.Map as M
 
 
 import Data.Machine.Moore
-
-{-
-
---  Examples of circuitry composition based on glue between black boxes (Mealy) and inspectable boxes (Moore)
-import Data.Machine.Mealy
-
-
-add1 = arr (Just . (*2)) :: Mealy Float (Maybe Float)
-add_and_average = add1 `glue` average :: Moore Float Average
-reverse_and_length :: Moore String Lengths
-reverse_and_length = arr (Just . Chars . reverse) `glue` lengths
-toString :: Mealy Chars String
-toString = arr (\(Chars x) -> x) 
-
--- only one statistic computed for 2 results, is it really sharing ?
-share :: Mealy a b -> Moore b c -> Moore b d -> (Moore a c, Moore a d)
-share stat moore1 moore2 =  (glue stat moore1, glue stat moore2) 
-
--}
 -- count nulls and hits
 
 -- if Machine hides the input type 'a' requesting a Read counter should nail down 'a' to some fake Readable datatype detecting null
@@ -161,6 +143,9 @@ averageLength = let
   f n x Nothing = make n x
   f n (Just !a) (Just (Chars x)) = make (n + 1) (Just $ a + length x)
   in make 0 Nothing
+
+
+
 
 
 
