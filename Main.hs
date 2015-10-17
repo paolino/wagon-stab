@@ -28,7 +28,7 @@ import Data.List.Split (splitOn)
 
 zipWithU f [] [] = []
 zipWithU f (x:xs) (y:ys) = f x y : zipWithU f xs ys
-zipWithU _ _ _ = error "zipping different length list"
+zipWithU _ _ _ = error "zipping on different length lists"
 
 
 
