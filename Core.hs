@@ -1,12 +1,18 @@
 {-# LANGUAGE 
    ExistentialQuantification
   , BangPatterns
+  , TemplateHaskell
+  , ViewPatterns
   #-}
 module Core where
 
 import Data.Machine.Moore
 import Data.Machine.Mealy
 import Control.Arrow
+import Control.Lens
+import Control.Lens.TH
+import Lib (forceElems, zipWithU)
+import Text.Read (readMaybe)
 
 -- final filter boxes are Moore machines 
 -- (which is not a Category instance :-()
@@ -16,18 +22,26 @@ import Control.Arrow
 
 
 --  a box for operations hiding result type, as we only need to report. (Show, should be JSON)
-
-data Machine a = forall b . Show b => Machine (Moore  a b)
+data Machine a = forall b . Show b => Machine (Moore a b)
 
 -- step the machine, feeding an input, force the output to be evaluated
 operate ::  Machine a -> a -> Machine a
 operate (Machine (Moore !x f)) = Machine .  f  
 
-glue :: Mealy a b -> Moore b c -> Moore a c
-glue (Mealy me) (Moore r mo) = Moore r (\x -> let 
-    (y,me') = me x
-    in glue me' $ mo y 
-    )
+--- a  contatiner for machines reading same input, should have a strict list as argument, so we force the spine and leave the element evaluation to stepParallels
+data Parallels = forall a. Read a => Parallels [Machine (Maybe a)]
 
+-- step all machines of a Parallels with same input , parsed, forcing each Machine evaluation
+step :: String -> Parallels -> Parallels
+step s (Parallels !(forceElems -> ms)) = Parallels $ map (flip operate . readMaybe $ s) ms
+
+-- the set of machines for each column are intended to work in parallel
+data Column  = Column {title :: String , _machines :: !Parallels} 
+
+makeLenses ''Column
+
+-- feed a list of string to be parsed to the list of columns, step is doing parsing
+feed :: [String] -> [Column] ->  [Column]
+feed  = zipWithU (over machines . step)  
 
 

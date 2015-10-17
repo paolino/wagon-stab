@@ -18,7 +18,7 @@ import Data.Machine.Moore
 
 {-
 
----- Examples of circuitry composition based on glue between black boxes (Mealy) and inspectable boxes (Moore)
+--  Examples of circuitry composition based on glue between black boxes (Mealy) and inspectable boxes (Moore)
 import Data.Machine.Mealy
 
 
