@@ -20,7 +20,7 @@ import Control.Lens (over,view)
 
 import Data.List.Split (splitOn)
 
-import Data.Machine.Moore
+import Data.Machine.Moore (Moore (..))
 import Core (operate, Machine (..))
 import Machines
 

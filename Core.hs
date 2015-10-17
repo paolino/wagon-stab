@@ -5,6 +5,8 @@
 module Core where
 
 import Data.Machine.Moore
+import Data.Machine.Mealy
+import Control.Arrow
 
 -- final filter boxes are Moore machines 
 -- (which is not a Category instance :-()
@@ -20,3 +22,12 @@ data Machine a = forall b . Show b => Machine (Moore  a b)
 -- step the machine, feeding an input, force the output to be evaluated
 operate ::  Machine a -> a -> Machine a
 operate (Machine (Moore !x f)) = Machine .  f  
+
+glue :: Mealy a b -> Moore b c -> Moore a c
+glue (Mealy me) (Moore r mo) = Moore r (\x -> let 
+    (y,me') = me x
+    in glue me' $ mo y 
+    )
+
+
+
