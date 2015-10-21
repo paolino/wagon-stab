@@ -4,7 +4,9 @@
   , TemplateHaskell
   , BangPatterns
   #-}
-module Combinator where
+  
+-- experimenting insertion of mealy in moores
+-- module Combinator where
 
 import Core
 import Prelude hiding ((.),id)
