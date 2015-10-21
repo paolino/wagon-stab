@@ -1,5 +1,5 @@
 {-# LANGUAGE InstanceSigs #-}
-
+-- mealy machines are monad transformers (to complete)
 module MealyT where
 
 import Control.Applicative
