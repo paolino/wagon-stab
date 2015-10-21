@@ -16,10 +16,8 @@ import qualified Data.Map as M
 
 
 import Data.Machine.Moore
+
 -- count nulls and hits
-
--- if Machine hides the input type 'a' requesting a Read counter should nail down 'a' to some fake Readable datatype detecting null
-
 data Counter = Counter {nulls :: Int, hits :: Int, total :: Int} deriving Show
 
 counter  :: Moore (Maybe a) Counter
