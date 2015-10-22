@@ -11,9 +11,8 @@ import Data.Machine.Mealy
 import Control.Arrow
 import Control.Lens
 import Control.Lens.TH
-import Lib (forceElems, zipWithU)
+import Lib (forceElems, zipWithU, forceElemsPar)
 import Text.Read (readMaybe)
-import Debug.Trace
 
 -- final filter boxes are Moore machines 
 -- (which is not a Category instance :-()
