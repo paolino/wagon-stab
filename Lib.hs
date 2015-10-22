@@ -1,5 +1,7 @@
 
 module Lib where
+import Control.Parallel.Strategies
+import Control.Parallel
 
 -- | unforgiving zipWith, list lengths must match
 zipWithU :: (a -> b -> c) -> [a] -> [b] -> [c]
@@ -9,9 +11,10 @@ zipWithU _ _ _ = error "zipping on different length lists"
 
 -- | force a list evaluation with elements 
 forceElems :: [a] -> [a]
-forceElems xs = f xs `seq` xs where
+forceElems xs = f xs `pseq` xs where
   f [] = ()
-  f (x:xs) = x `seq` f xs
+  f (x:xs) = x `pseq` f xs
+
 
 
 

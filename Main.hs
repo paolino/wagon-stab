@@ -7,8 +7,9 @@ import Prelude hiding (minimum, maximum)
 import Control.Exception (tryJust)
 import Control.Monad (guard,forM_)
 import System.IO.Error (isEOFError)
-
+import System.Environment (getArgs)
 import Control.Lens (view)
+import Text.Read (readMaybe)
 
 
 import Data.List.Split (splitOn)
@@ -18,6 +19,8 @@ import Core (operate, Machine (..), Parallels (..), Column (..), feed, machines)
 import Lib (forceElems)
 import Machines (minimum, maximum, counter, averageLength, average, lengths, occurs)
 
+import Control.Parallel.Strategies
+import Control.Parallel
 
 -- from header to Column, select machines depending on header type. Counter ispolymorph
 
@@ -44,12 +47,21 @@ output h = do
 csv :: IO [String]
 csv = splitOn "," <$> filter (/= '\r') <$> getLine
 
--- read all next lines updating the column list on each turn. Return last update, force each Column and the list to whnf on each turn 
 
-cycling :: [Column] -> IO [Column]
-cycling !(forceElems -> cs) = 
-  tryJust (guard . isEOFError) csv >>= 
-     either (const $ return cs) (cycling . flip feed cs)
 
 -- read first line to produce the booting [Column] value, cycle by reading line by line and print a report of the result
-main = map column <$> csv >>= cycling >>= mapM_ output
+main = do
+  rs <- getArgs
+  let 
+    nc = case rs of
+      [] -> 1
+      (r:rs) -> maybe 1 id $ readMaybe r
+    -- read all next lines updating the column list on each turn. Return last update, force each Column and the list to whnf on each turn 
+    cycling :: Int -> [Column] -> IO [Column]
+    cycling n !cs = let 
+      cs' = (if n `mod` nc == 0 then  withStrategy (evalList rseq `dot` parList rseq)   else id) $ cs
+      in
+      tryJust (guard . isEOFError) csv >>=   
+         either (const $ return cs) ( cycling (n + 1). flip feed cs')
+  
+  map column <$> csv >>= cycling 0 >>= mapM_ output

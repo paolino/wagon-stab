@@ -13,6 +13,7 @@ import Control.Lens
 import Control.Lens.TH
 import Lib (forceElems, zipWithU)
 import Text.Read (readMaybe)
+import Debug.Trace
 
 -- final filter boxes are Moore machines 
 -- (which is not a Category instance :-()
@@ -33,7 +34,7 @@ data Parallels = forall a. Read a => Parallels [Machine (Maybe a)]
 
 -- step all machines of a Parallels with same input , parsed, forcing each Machine evaluation
 step :: String -> Parallels -> Parallels
-step s (Parallels !(forceElems -> ms)) = Parallels $ map (flip operate . readMaybe $ s) ms
+step s (Parallels !(forceElems -> ms)) = Parallels $ map ( flip operate . readMaybe $ s) ms
 
 -- the set of machines for each column are intended to work in parallel
 data Column  = Column {title :: String , _machines :: !Parallels} 
