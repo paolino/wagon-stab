@@ -3,8 +3,8 @@ compile with
 
   cabal install
 
-run on a 4 core machine with 
+run on a multicore machine with 
 
-  ./generator 10000 | dist/build/Filters/Filters 180 +RTS -N3
+  ./generator 10000 | dist/build/Filters/Filters 30 +RTS -N2
 
-180 is the number of lines read before each parallel execution, empirically found
+30 is the number of lines read before each parallel execution, empirically found
