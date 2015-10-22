@@ -5,6 +5,6 @@ compile with
 
 run on a multicore machine with 
 
-  ./generator 10000 | dist/build/Filters/Filters 30 +RTS -N2
+  ./generator 10000 | dist/build/Filters/Filters 50 +RTS -N2
 
-30 is the number of lines read before each parallel execution, empirically found
+50 is the number of lines read before each parallel execution, empirically found

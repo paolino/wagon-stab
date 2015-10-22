@@ -30,7 +30,7 @@ operate ::  Machine a -> a -> Machine a
 operate (Machine (Moore !x f)) = Machine .  f  
 
 multioperate :: Machine a -> [a] -> Machine a
-multioperate (Machine m@(Moore !x _)) = Machine . foldl' k m where
+multioperate (Machine m@(Moore !x _)) = Machine . foldl k m where
   k (Moore x f) = f 
 --- a  contatiner for machines reading same input, should have a strict list as argument, so we force the spine and leave the element evaluation to stepParallels
 data Parallels = forall a. Read a => Parallels [Machine (Maybe a)]
