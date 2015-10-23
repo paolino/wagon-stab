@@ -41,7 +41,7 @@ step s (Parallels !(forceElems -> ms)) = Parallels $ map ( flip operate . readMa
 
 multistep :: [String] -> Parallels -> Parallels
 multistep xs (Parallels !(forceElemsPar -> ms)) = Parallels $ map (flip multioperate xs') ms
-  where xs' = map readMaybe $ xs
+  where xs' = forceElems $ map readMaybe $ xs
 
 -- the set of machines for each column are intended to work in parallel
 data Column  = Column {title :: String , _machines :: !Parallels} 

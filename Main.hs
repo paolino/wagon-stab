@@ -18,7 +18,7 @@ import Data.List.Split (splitOn)
 
 import Data.Machine.Moore (Moore (..))
 import Core (operate, Machine (..), Parallels (..), Column (..), feed, machines, multifeed)
-import Lib (forceElemsPar, forceElems)
+import Lib (forceElemsPar, forceElems')
 import Machines (minimum, maximum, counter, averageLength, average, lengths, occurs)
 import Control.Monad
 import Control.Parallel.Strategies
@@ -70,7 +70,7 @@ multicycling nc !cs = do
   let cs' = forceElemsPar (multifeed ls cs)
   if null ls then return cs 
     else if out then return cs'
-      else multicycling nc cs'
+      else multicycling nc $ forceElems' $ cs'
   
 
 
