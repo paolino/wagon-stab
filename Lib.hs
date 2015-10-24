@@ -14,15 +14,14 @@ forceElems :: [a] -> [a]
 forceElems xs = f xs `pseq` xs where
   f [] = ()
   f (x:xs) = x `pseq` f xs
-forceElemsPar = runEval . parListWait where
-  parListWait :: [a] -> Eval [a]
-  parListWait [] = return []
-  parListWait (x:xs) = do
-    x' <- rpar x
-    xs' <- parListWait xs
-    x'' <- rseq x'
-    xs'' <- rseq xs'
-    return $ x'' : xs''
+parListWait :: [a] -> Eval [a]
+parListWait [] = return []
+parListWait (x:xs) = do
+  x' <- rpar x
+  xs' <- parListWait xs
+  x'' <- rseq x'
+  xs'' <- rseq xs'
+  return $ x'' : xs''
 
 forceElems' = runEval . parListWait where
   parListWait :: [a] -> Eval [a]

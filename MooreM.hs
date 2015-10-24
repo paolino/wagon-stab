@@ -8,7 +8,6 @@
   , BangPatterns
   #-}
 import Data.List
-import Data.List.Split
 import Data.Monoid
 
 import Prelude hiding (minimum, maximum)
@@ -16,32 +15,41 @@ import Control.Arrow ((&&&), arr)
 
 import qualified Data.Map as M
 import Control.Parallel.Strategies
+import Control.Monad
+import Lib
+
+data Minimum = Minimum !(Maybe Integer) deriving Show
+
+instance Monoid Minimum where
+  Minimum (Just !x) `mappend` Minimum (Just !y) = Minimum . Just $  min x y
+  Minimum Nothing `mappend` Minimum Nothing = Minimum Nothing
+  Minimum x `mappend` Minimum Nothing = Minimum x
+  _ `mappend` y = y
+  mempty = Minimum Nothing
 
 
-data Moore m a b = Moore {
-    state :: !m
-  , output :: m -> b
-  , accept :: m -> a -> Moore m a b
-  }
+digest :: Monoid m => Int -> (m -> a -> m) -> m -> [a] -> m 
+digest n i x = foldl' mappend mempty .  withStrategy (parListWait) . zipWith (foldl' i) (x : repeat mempty) . chunksOf n 
+chunksOf m xs = chunksOf' m xs  where
+  chunksOf' n [] = [[]]
+  chunksOf' 0 xs = []:chunksOf' m xs 
+  chunksOf' n (x:xs) = let 
+    (h:r) = chunksOf' (n - 1) xs
+    in (x:h):r
+main = do
+  let datas = map Just $ [100000000,100000000-1..1]
+  print $ digest (1000000) (\m -> mappend m . Minimum) mempty datas
+  
+{-
 
 
+data MoorePar a b = forall m . Monoid m => MoorePar  (m -> b) (m -> a -> m) !m
 
-digestM :: [a] -> Moore m a  b -> Moore m a  b
-digestM  = flip (foldl (\m x -> accept m (state m) x))
-
-
-digestMs :: Monoid m => [[a]] -> Moore m a b -> Moore m a  b
-digestMs xs m = foldl1 f . withStrategy (parList rseq) . zipWith digestM xs $ m : repeat m{state = mempty} where
-  f !m !m' =  m{state = state m `mappend` state m'}
-
-
-data MoorePar a b = forall m . Monoid m => MoorePar !(Moore m a b)
-
-digest :: Int -> [a] -> MoorePar a b -> MoorePar a b
-digest n xs (MoorePar !m) = MoorePar . flip digestMs m . chunksOf n $ xs
+digest :: Int -> MoorePar a b -> [a] -> MoorePar a b 
+digest n (MoorePar o i x ) = MoorePar o i . foldl1 mappend . withStrategy (parList rseq) . zipWith (foldl' i) (x : repeat mempty) . chunksOf n 
 
 result :: MoorePar a b -> b
-result (MoorePar m) = output m (state m)
+result (MoorePar o i x) = o x
 
 -- count nulls and hits
 data Counter = Counter {nulls :: Int, hits :: Int, total :: Int} deriving Show
@@ -50,38 +58,37 @@ data Count = Count !Int !Int
 
 instance Monoid Count where
   mempty = Count 0 0
-  (Count n1 m1) `mappend` (Count n2 m2) = Count (n1 + n2) (m1 + m2)
+  mappend (Count n1 m1) (Count n2 m2) = Count (n1 + n2) (m1 + m2)
 
 fromCount (Count n m) = Counter n m (n + m)
 
-counter  :: Moore Count (Maybe a) Counter
-counter = let 
-  make !c = Moore c fromCount f 
-  f (Count n m) Nothing = make $ Count (n + 1) m
-  f (Count n m) _ = make $ Count n (m + 1)
-  in make mempty
+counter  :: MoorePar (Maybe a) Counter
+counter = MoorePar fromCount f mempty  where
+  f (Count n m) Nothing = Count (n + 1) m
+  f (Count n m) _ = Count n (m + 1)
 
 
-feed :: Int -> MoorePar a b -> [[a]] -> MoorePar a b
-feed n m = foldl (flip $ digest n)  m
+feed :: Int -> [Moore a ] -> [[a]] -> [Moore a ]
+feed n m = map (\(Moore m) -> Moore . foldl (digest n)) m
 
-main = print . result $ feed 100 (MoorePar counter)  (chunksOf 400 $ map Just [1..50000000]) 
-{-
+data Moore a = forall b . Show b => Moore (MoorePar a b)
+
+main = do
+  let datas = chunksOf 600 $ map Just [1..50000000]
+  print . map (show . result) $ feed 100 [Moore counter, Moore minimum'] $ datas
 -----------------------------------------
 
 -- track minimum value
 
 data Minimum = Minimum !(Maybe Float) deriving Show
 
-minimum :: Moore (Maybe Float) Minimum 
-minimum = let 
-  make m = Moore (Minimum m) $ f m 
-  f Nothing x = make x
-  f (Just m) (Just x) 
-    | x < m = make $ Just x
-    | otherwise = make $ Just m
-  f m Nothing = make m
-  in make Nothing
+instance Monoid Minimum where
+  mappend = liftM2 min
+  mempty = Nothing
+
+
+minimum' :: MoorePar  (Maybe Float) Minimum 
+minimum' = MoorePar mappend id Nothing 
 ---------------------------------------------
 
 -- track maximum value
